@@ -27,6 +27,21 @@ function missingSupabaseError() {
   return new Error(`Missing ${supabaseConfig.missingKeys.join(' and ')} in deployment environment variables.`) as AuthError;
 }
 
+function profileSeedFromUser(user: User, displayName = '') {
+  const metadata = user.user_metadata as Record<string, string | undefined>;
+  return {
+    email: user.email ?? null,
+    displayName:
+      displayName ||
+      metadata.display_name ||
+      metadata.full_name ||
+      metadata.name ||
+      user.email?.split('@')[0] ||
+      '',
+    avatarUrl: metadata.avatar_url || metadata.picture || null,
+  };
+}
+
 function MissingSupabaseConfig() {
   return (
     <div className="min-h-screen bg-background px-4 py-10 text-slate-100">
@@ -78,11 +93,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        await createOrUpdateProfile(
-          session.user.id,
-          session.user.email ?? null,
-          (session.user.user_metadata as any)?.display_name ?? ''
-        );
+        const profile = profileSeedFromUser(session.user);
+        await createOrUpdateProfile(session.user.id, profile.email, profile.displayName, profile.avatarUrl);
       }
       setLoading(false);
     }
@@ -93,11 +105,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        await createOrUpdateProfile(
-          session.user.id,
-          session.user.email ?? null,
-          (session.user.user_metadata as any)?.display_name ?? ''
-        );
+        const profile = profileSeedFromUser(session.user);
+        await createOrUpdateProfile(session.user.id, profile.email, profile.displayName, profile.avatarUrl);
       }
       setLoading(false);
     });
@@ -120,11 +129,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(data.user ?? null);
           setSession(data.session ?? null);
           if (data.user) {
-            await createOrUpdateProfile(
-              data.user.id,
-              data.user.email ?? null,
-              (data.user.user_metadata as any)?.display_name ?? ''
-            );
+            const profile = profileSeedFromUser(data.user);
+            await createOrUpdateProfile(data.user.id, profile.email, profile.displayName, profile.avatarUrl);
           }
         }
         return { error };
@@ -145,7 +151,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(data.user ?? null);
           setSession(data.session ?? null);
           if (data.user) {
-            await createOrUpdateProfile(data.user.id, data.user.email ?? null, displayName);
+            const profile = profileSeedFromUser(data.user, displayName);
+            await createOrUpdateProfile(data.user.id, profile.email, profile.displayName, profile.avatarUrl);
           }
         }
         return { error };
@@ -189,7 +196,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return { error: null };
         }
 
-        await createOrUpdateProfile(userId, authData.user?.email ?? user?.email ?? null, displayName);
+        await createOrUpdateProfile(userId, authData.user?.email ?? user?.email ?? null, displayName, avatarUrl || null);
         const profileResult = await updateStoredProfile(userId, {
           display_name: displayName,
           avatar_url: avatarUrl || null,

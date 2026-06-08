@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import type { Profile } from './profileClient';
+import { createOrUpdateProfile } from './profileClient';
 
 export type ProjectRole = 'owner' | 'admin' | 'member';
 
@@ -36,6 +36,13 @@ export type ProjectInput = {
   parent_project_id?: string | null;
 };
 
+export type ProjectOwnerProfile = {
+  id: string;
+  email: string | null;
+  displayName: string;
+  avatarUrl?: string | null;
+};
+
 const db = supabase as any;
 
 export async function getProjects(userId: string) {
@@ -49,7 +56,20 @@ export async function getProjects(userId: string) {
   return { data: (data ?? []) as Project[], error };
 }
 
-export async function createProject(input: ProjectInput, ownerId: string) {
+export async function createProject(input: ProjectInput, owner: string | ProjectOwnerProfile) {
+  const ownerId = typeof owner === 'string' ? owner : owner.id;
+
+  const fallbackProfile = await createOrUpdateProfile(
+    ownerId,
+    typeof owner === 'string' ? null : owner.email,
+    typeof owner === 'string' ? '' : owner.displayName,
+    typeof owner === 'string' ? null : owner.avatarUrl ?? null
+  );
+
+  if (fallbackProfile.error) {
+    console.warn('Unable to ensure owner profile before project creation:', fallbackProfile.error.message);
+  }
+
   const { data, error } = await db
     .from('projects')
     .insert({
@@ -68,7 +88,12 @@ export async function createProject(input: ProjectInput, ownerId: string) {
   }
 
   const membership = await db.from('project_members').insert({ project_id: data.id, user_id: ownerId, role: 'owner' });
-  return { data: data as Project, error: membership.error ?? null };
+  if (membership.error) {
+    await db.from('projects').delete().eq('id', data.id);
+    return { data: null, error: membership.error };
+  }
+
+  return { data: data as Project, error: null };
 }
 
 export async function updateProject(projectId: string, updates: Partial<ProjectInput>) {

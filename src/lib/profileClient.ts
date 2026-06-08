@@ -18,19 +18,27 @@ export async function getProfile(userId: string) {
   return { data: data as Profile | null, error };
 }
 
-export async function createOrUpdateProfile(userId: string, email: string | null, displayName: string) {
+export async function createOrUpdateProfile(
+  userId: string,
+  email: string | null,
+  displayName: string,
+  avatarUrl?: string | null
+) {
   const fallbackName = email?.split('@')[0] ?? 'TaskFlow User';
+  const profile: Record<string, string | null> = {
+    id: userId,
+    email,
+    display_name: displayName || fallbackName,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (avatarUrl) {
+    profile.avatar_url = avatarUrl;
+  }
+
   const { data, error } = await db
     .from('profiles')
-    .upsert(
-      {
-        id: userId,
-        email,
-        display_name: displayName || fallbackName,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'id' }
-    )
+    .upsert(profile, { onConflict: 'id' })
     .select()
     .single();
 

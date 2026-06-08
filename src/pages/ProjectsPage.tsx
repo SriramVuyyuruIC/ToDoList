@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Archive,
   ArrowRight,
+  BarChart3,
+  CheckCircle2,
+  Clock3,
   FolderTree,
   Mail,
   Palette,
@@ -30,6 +33,7 @@ import {
   updateMemberRole,
   updateProject,
 } from '../lib/projectsClient';
+import { getTasksForProjects, Task } from '../lib/tasksClient';
 
 const projectColors = ['#ef4444', '#f59e0b', '#22c55e', '#38bdf8', '#a855f7'];
 const projectIcons = ['Launch', 'Law', 'Ops', 'Study', 'Client'];
@@ -53,6 +57,8 @@ const emptyProjectForm: ProjectFormState = {
 function ProjectsPage() {
   const { user } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [memberCounts, setMemberCounts] = useState<Record<string, number>>({});
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [form, setForm] = useState<ProjectFormState>(emptyProjectForm);
@@ -73,12 +79,34 @@ function ProjectsPage() {
 
       if (error) {
         setStatus(error.message || 'Unable to load projects.');
+        setTasks([]);
+        setMemberCounts({});
         return;
       }
 
       const nextProjects = data ?? [];
       setProjects(nextProjects);
       setSelectedProjectId((prev) => (prev && nextProjects.some((project) => project.id === prev) ? prev : nextProjects[0]?.id ?? null));
+
+      const [taskResult, memberResults] = await Promise.all([
+        getTasksForProjects(nextProjects.map((project) => project.id)),
+        Promise.all(nextProjects.map((project) => getProjectMembers(project.id))),
+      ]);
+
+      if (cancelled) return;
+
+      if (taskResult.error) {
+        console.warn('Unable to load project task statistics:', taskResult.error.message);
+        setTasks([]);
+      } else {
+        setTasks(taskResult.data ?? []);
+      }
+
+      const counts = memberResults.reduce<Record<string, number>>((acc, result, index) => {
+        acc[nextProjects[index].id] = result.data?.length ?? 0;
+        return acc;
+      }, {});
+      setMemberCounts(counts);
     }
 
     load();
@@ -108,6 +136,7 @@ function ProjectsPage() {
       }
 
       setMembers(data ?? []);
+      setMemberCounts((current) => ({ ...current, [projectId]: data?.length ?? 0 }));
     }
 
     loadMembers();
@@ -123,6 +152,27 @@ function ProjectsPage() {
     () => projects.filter((project) => project.parent_project_id === selectedProjectId),
     [projects, selectedProjectId]
   );
+  const projectStats = useMemo(() => {
+    const stats = new Map<string, { total: number; completed: number; active: number; overdue: number; percent: number }>();
+    const today = new Date().toISOString().slice(0, 10);
+
+    projects.forEach((project) => {
+      const projectTasks = tasks.filter((task) => task.project_id === project.id);
+      const completed = projectTasks.filter((task) => task.status === 'completed').length;
+      const active = projectTasks.length - completed;
+      const overdue = projectTasks.filter((task) => task.status !== 'completed' && task.due_date && task.due_date < today).length;
+      stats.set(project.id, {
+        total: projectTasks.length,
+        completed,
+        active,
+        overdue,
+        percent: projectTasks.length ? Math.round((completed / projectTasks.length) * 100) : 0,
+      });
+    });
+
+    return stats;
+  }, [projects, tasks]);
+  const currentStats = currentProject ? projectStats.get(currentProject.id) : null;
 
   const startEditing = () => {
     if (!currentProject) return;
@@ -149,7 +199,18 @@ function ProjectsPage() {
         icon: form.icon,
         parent_project_id: form.parent_project_id || null,
       },
-      user.id
+      {
+        id: user.id,
+        email: user.email ?? null,
+        displayName:
+          (user.user_metadata as Record<string, string | undefined>)?.display_name ||
+          user.email?.split('@')[0] ||
+          'TaskFlow User',
+        avatarUrl:
+          (user.user_metadata as Record<string, string | undefined>)?.avatar_url ||
+          (user.user_metadata as Record<string, string | undefined>)?.picture ||
+          null,
+      }
     );
     setLoading(false);
 
@@ -159,6 +220,7 @@ function ProjectsPage() {
     }
 
     setProjects((current) => [data, ...current]);
+    setMemberCounts((current) => ({ ...current, [data.id]: 1 }));
     setSelectedProjectId(data.id);
     setForm(emptyProjectForm);
     setStatus('Project created.');
@@ -196,6 +258,12 @@ function ProjectsPage() {
       return;
     }
     setProjects((current) => current.filter((project) => project.id !== currentProject.id));
+    setTasks((current) => current.filter((task) => task.project_id !== currentProject.id));
+    setMemberCounts((current) => {
+      const next = { ...current };
+      delete next[currentProject.id];
+      return next;
+    });
     setSelectedProjectId(projects.find((project) => project.id !== currentProject.id)?.id ?? null);
     setStatus('Project archived.');
   };
@@ -208,6 +276,12 @@ function ProjectsPage() {
       return;
     }
     setProjects((current) => current.filter((project) => project.id !== currentProject.id));
+    setTasks((current) => current.filter((task) => task.project_id !== currentProject.id));
+    setMemberCounts((current) => {
+      const next = { ...current };
+      delete next[currentProject.id];
+      return next;
+    });
     setSelectedProjectId(projects.find((project) => project.id !== currentProject.id)?.id ?? null);
     setStatus('Project deleted.');
   };
@@ -231,6 +305,7 @@ function ProjectsPage() {
     const { data } = await getProjectMembers(selectedProjectId);
     if (data) {
       setMembers(data);
+      setMemberCounts((current) => ({ ...current, [selectedProjectId]: data.length }));
     }
   };
 
@@ -250,6 +325,9 @@ function ProjectsPage() {
       return;
     }
     setMembers((current) => current.filter((member) => member.id !== memberId));
+    if (selectedProjectId) {
+      setMemberCounts((current) => ({ ...current, [selectedProjectId]: Math.max((current[selectedProjectId] ?? members.length) - 1, 0) }));
+    }
   };
 
   const renderProjectForm = (targetForm: ProjectFormState, onChange: (next: ProjectFormState) => void) => (
@@ -328,12 +406,78 @@ function ProjectsPage() {
 
   return (
     <section className="space-y-4">
-      <div className="border border-border bg-surface p-4 shadow-xl shadow-black/10">
+      <div className="rounded-lg border border-white/10 bg-surface p-5 shadow-2xl shadow-black/20">
         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-accent">Projects</p>
-        <h2 className="mt-2 text-2xl font-semibold text-white sm:text-3xl">Collaborative workspaces</h2>
+        <h2 className="mt-3 text-3xl font-semibold text-white sm:text-4xl">Collaborative workspaces</h2>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
+          Build focused project rooms with members, nested workstreams, task progress, and shared context.
+        </p>
       </div>
 
       {status ? <p className="rounded-lg border border-border bg-[#0b101d] px-4 py-3 text-sm text-slate-200">{status}</p> : null}
+
+      <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
+        {projects.length === 0 ? (
+          <div className="rounded-lg border border-border bg-surface p-6 shadow-lg shadow-black/10 md:col-span-2 2xl:col-span-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-start gap-4">
+                <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-red-500/30 bg-red-500/10">
+                  <FolderTree className="h-7 w-7 text-accent" />
+                </span>
+                <div>
+                  <h3 className="text-xl font-semibold text-white">No projects yet</h3>
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
+                    Create a project to get a board, invite teammates, and start tracking task progress in one place.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => document.querySelector<HTMLInputElement>('input[placeholder=\"Civil Procedure\"]')?.focus()}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-500"
+              >
+                <Plus className="h-4 w-4" />
+                Start project
+              </button>
+            </div>
+          </div>
+        ) : (
+          projects.map((project) => {
+            const stats = projectStats.get(project.id);
+            return (
+              <button
+                key={project.id}
+                type="button"
+                onClick={() => setSelectedProjectId(project.id)}
+                className={`rounded-lg border bg-surface p-4 text-left shadow-lg shadow-black/10 transition duration-200 hover:-translate-y-0.5 hover:border-accent ${
+                  selectedProjectId === project.id ? 'border-accent/70 ring-1 ring-accent/20' : 'border-border'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-xs font-semibold text-white" style={{ backgroundColor: project.color ?? '#ef4444' }}>
+                      {(project.icon ?? project.name).slice(0, 2)}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-white">{project.name}</p>
+                      <p className="mt-1 truncate text-xs text-slate-400">{project.description || 'No description yet'}</p>
+                    </div>
+                  </div>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-slate-500" />
+                </div>
+                <div className="mt-4 grid grid-cols-3 gap-2 text-xs text-slate-400">
+                  <span className="rounded-md border border-border bg-[#0b101d] px-2 py-1">{stats?.total ?? 0} tasks</span>
+                  <span className="rounded-md border border-border bg-[#0b101d] px-2 py-1">{memberCounts[project.id] ?? 0} members</span>
+                  <span className="rounded-md border border-border bg-[#0b101d] px-2 py-1">{stats?.percent ?? 0}% done</span>
+                </div>
+                <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[#0b101d]">
+                  <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${stats?.percent ?? 0}%` }} />
+                </div>
+              </button>
+            );
+          })
+        )}
+      </div>
 
       <div className="grid gap-4 xl:grid-cols-[390px_minmax(0,1fr)]">
         <aside className="h-fit rounded-lg border border-border bg-surface p-4 shadow-lg shadow-black/10">
@@ -417,6 +561,37 @@ function ProjectsPage() {
                     Delete
                   </button>
                 </div>
+              </div>
+
+              <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {[
+                  { label: 'Total tasks', value: currentStats?.total ?? 0, icon: BarChart3 },
+                  { label: 'Active', value: currentStats?.active ?? 0, icon: Clock3 },
+                  { label: 'Completed', value: currentStats?.completed ?? 0, icon: CheckCircle2 },
+                  { label: 'Members', value: memberCounts[currentProject.id] ?? members.length, icon: Users },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <article key={item.label} className="rounded-lg border border-border bg-[#0b101d] p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm text-slate-400">{item.label}</p>
+                        <Icon className="h-4 w-4 text-accent" />
+                      </div>
+                      <p className="mt-3 text-2xl font-semibold text-white">{item.value}</p>
+                    </article>
+                  );
+                })}
+              </div>
+
+              <div className="mt-4 rounded-lg border border-border bg-[#0b101d] p-4">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="font-semibold text-white">Progress</span>
+                  <span className="text-slate-400">{currentStats?.percent ?? 0}% complete</span>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#111827]">
+                  <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${currentStats?.percent ?? 0}%` }} />
+                </div>
+                {currentStats?.overdue ? <p className="mt-3 text-xs text-red-200">{currentStats.overdue} overdue tasks need attention.</p> : null}
               </div>
 
               {editing ? (
@@ -557,7 +732,15 @@ function ProjectsPage() {
               ) : null}
             </>
           ) : (
-            <div className="rounded-lg border border-border bg-[#0b101d] p-8 text-sm text-slate-300">Select or create a project.</div>
+            <div className="flex min-h-[360px] flex-col items-center justify-center rounded-lg border border-border bg-[#0b101d] p-8 text-center">
+              <span className="flex h-14 w-14 items-center justify-center rounded-lg border border-border bg-[#111827]">
+                <FolderTree className="h-7 w-7 text-accent" />
+              </span>
+              <p className="mt-4 text-lg font-semibold text-white">Select or create a project</p>
+              <p className="mt-2 max-w-md text-sm leading-6 text-slate-400">
+                Project details, progress, members, and nested workstreams will appear here.
+              </p>
+            </div>
           )}
         </div>
       </div>

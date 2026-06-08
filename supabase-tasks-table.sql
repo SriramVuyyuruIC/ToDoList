@@ -20,6 +20,85 @@ alter table profiles add column if not exists timezone text;
 alter table profiles add column if not exists theme_preference text default 'dark';
 alter table profiles add column if not exists updated_at timestamptz;
 
+create or replace function public.handle_new_auth_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (
+    id,
+    email,
+    display_name,
+    avatar_url,
+    created_at,
+    updated_at
+  )
+  values (
+    new.id,
+    new.email,
+    coalesce(
+      nullif(new.raw_user_meta_data ->> 'display_name', ''),
+      nullif(new.raw_user_meta_data ->> 'full_name', ''),
+      nullif(new.raw_user_meta_data ->> 'name', ''),
+      split_part(new.email, '@', 1),
+      'TaskFlow User'
+    ),
+    coalesce(
+      nullif(new.raw_user_meta_data ->> 'avatar_url', ''),
+      nullif(new.raw_user_meta_data ->> 'picture', '')
+    ),
+    coalesce(new.created_at, now()),
+    now()
+  )
+  on conflict (id) do update
+    set email = excluded.email,
+        display_name = coalesce(public.profiles.display_name, excluded.display_name),
+        avatar_url = coalesce(public.profiles.avatar_url, excluded.avatar_url),
+        updated_at = now();
+
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_auth_user();
+
+insert into public.profiles (
+  id,
+  email,
+  display_name,
+  avatar_url,
+  created_at,
+  updated_at
+)
+select
+  users.id,
+  users.email,
+  coalesce(
+    nullif(users.raw_user_meta_data ->> 'display_name', ''),
+    nullif(users.raw_user_meta_data ->> 'full_name', ''),
+    nullif(users.raw_user_meta_data ->> 'name', ''),
+    split_part(users.email, '@', 1),
+    'TaskFlow User'
+  ),
+  coalesce(
+    nullif(users.raw_user_meta_data ->> 'avatar_url', ''),
+    nullif(users.raw_user_meta_data ->> 'picture', '')
+  ),
+  coalesce(users.created_at, now()),
+  now()
+from auth.users as users
+on conflict (id) do update
+  set email = excluded.email,
+      display_name = coalesce(public.profiles.display_name, excluded.display_name),
+      avatar_url = coalesce(public.profiles.avatar_url, excluded.avatar_url),
+      updated_at = now();
+
 create table if not exists projects (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references auth.users(id) on delete cascade,
@@ -42,11 +121,16 @@ alter table projects add column if not exists updated_at timestamptz;
 create table if not exists project_members (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references projects(id) on delete cascade,
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid not null references profiles(id) on delete cascade,
   role text not null default 'member',
   joined_at timestamptz not null default now(),
   unique (project_id, user_id)
 );
+
+alter table project_members drop constraint if exists project_members_user_id_fkey;
+alter table project_members
+  add constraint project_members_user_id_fkey
+  foreign key (user_id) references profiles(id) on delete cascade;
 
 create table if not exists tasks (
   id uuid primary key default gen_random_uuid(),

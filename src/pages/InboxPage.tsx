@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, CheckCircle2, Circle, Inbox, Plus, Trash2 } from 'lucide-react';
+import { CalendarDays, CheckCircle2, Circle, ClipboardList, Inbox, Lightbulb, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import { getProjects, Project } from '../lib/projectsClient';
 import { createTask, deleteTask, getTasksForProjects, Task, updateTask } from '../lib/tasksClient';
@@ -16,6 +16,12 @@ function groupTasks(tasks: Task[]) {
     completed: tasks.filter((task) => task.status === 'completed').slice(0, 8),
   };
 }
+
+const quickTemplates = [
+  { title: 'Plan the next project milestone', priority: 'high' as TaskPriority },
+  { title: 'Review open follow-ups', priority: 'medium' as TaskPriority },
+  { title: 'Schedule team check-in', priority: 'medium' as TaskPriority },
+];
 
 function TaskRow({
   task,
@@ -126,6 +132,7 @@ function InboxPage() {
 
   const projectNames = useMemo(() => new Map(projects.map((project) => [project.id, project.name])), [projects]);
   const grouped = useMemo(() => groupTasks(tasks), [tasks]);
+  const activeCount = grouped.overdue.length + grouped.today.length + grouped.upcoming.length + grouped.unscheduled.length;
 
   const handleCreate = async () => {
     if (!user || !projectId || !title.trim()) return;
@@ -184,9 +191,12 @@ function InboxPage() {
 
   return (
     <section className="space-y-4">
-      <div className="border border-border bg-surface p-4 shadow-xl shadow-black/10">
+      <div className="rounded-lg border border-white/10 bg-surface p-5 shadow-2xl shadow-black/20">
         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-accent">Inbox</p>
-        <h2 className="mt-2 text-2xl font-semibold text-white sm:text-3xl">Fast capture and triage</h2>
+        <h2 className="mt-3 text-3xl font-semibold text-white sm:text-4xl">Fast capture and triage</h2>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
+          Capture loose work, assign it to a project, and move it into the right deadline bucket.
+        </p>
       </div>
 
       {error ? <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</p> : null}
@@ -244,11 +254,55 @@ function InboxPage() {
               Add to inbox
             </button>
           </div>
+
+          <div className="mt-6 rounded-lg border border-border bg-[#0b101d] p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-accent" />
+              <p className="text-sm font-semibold text-white">Quick templates</p>
+            </div>
+            <div className="grid gap-2">
+              {quickTemplates.map((template) => (
+                <button
+                  key={template.title}
+                  type="button"
+                  onClick={() => {
+                    setTitle(template.title);
+                    setPriority(template.priority);
+                  }}
+                  className="rounded-lg border border-border bg-[#111827] p-3 text-left text-sm text-slate-300 transition hover:border-accent hover:text-white"
+                >
+                  {template.title}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-lg border border-border bg-[#0b101d] p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <Lightbulb className="h-4 w-4 text-accent" />
+              <p className="text-sm font-semibold text-white">Triage tips</p>
+            </div>
+            <div className="grid gap-2 text-sm leading-6 text-slate-400">
+              <p>Add the task first, then refine details on the dashboard board.</p>
+              <p>Use due dates only when timing matters, so the calendar stays trustworthy.</p>
+              <p>Assign tasks to yourself when you want them to surface in notifications.</p>
+            </div>
+          </div>
         </aside>
 
         <div className="grid gap-4">
           {loading ? (
             <div className="rounded-lg border border-border bg-surface p-8 text-sm text-slate-300">Loading inbox...</div>
+          ) : activeCount === 0 && grouped.completed.length === 0 ? (
+            <div className="flex min-h-[420px] flex-col items-center justify-center rounded-lg border border-border bg-surface p-8 text-center shadow-lg shadow-black/10">
+              <span className="flex h-16 w-16 items-center justify-center rounded-lg border border-red-500/30 bg-red-500/10">
+                <ClipboardList className="h-8 w-8 text-accent" />
+              </span>
+              <h3 className="mt-5 text-2xl font-semibold text-white">Your inbox is clear</h3>
+              <p className="mt-3 max-w-xl text-sm leading-6 text-slate-400">
+                Use quick capture for loose thoughts, or start with a template when you need a nudge. Once tasks exist, this page groups them by urgency automatically.
+              </p>
+            </div>
           ) : (
             sections.map((section) => (
               <section key={section.title} className="rounded-lg border border-border bg-surface p-4 shadow-lg shadow-black/10">
@@ -257,7 +311,20 @@ function InboxPage() {
                   <span className="rounded-md border border-border bg-[#0b101d] px-2 py-1 text-xs text-slate-300">{section.tasks.length}</span>
                 </div>
                 {section.tasks.length === 0 ? (
-                  <p className="rounded-lg border border-border bg-[#0b101d] p-4 text-sm text-slate-400">Nothing here right now.</p>
+                  <div className="rounded-lg border border-border bg-[#0b101d] p-4">
+                    <p className="text-sm font-semibold text-white">Nothing here right now</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-400">
+                      {section.title === 'Overdue'
+                        ? 'Great. No late work is waiting.'
+                        : section.title === 'Today'
+                          ? 'Add a due date for today to build a focused daily list.'
+                          : section.title === 'Upcoming'
+                            ? 'Future deadlines will appear here.'
+                            : section.title === 'Unscheduled'
+                              ? 'Captured tasks without dates will collect here.'
+                              : 'Completed work will show here briefly for review.'}
+                    </p>
+                  </div>
                 ) : (
                   <div className="grid gap-3">
                     {section.tasks.map((task) => (

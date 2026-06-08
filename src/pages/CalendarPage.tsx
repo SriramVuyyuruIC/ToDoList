@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
+import { AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3 } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import { getProjects, Project } from '../lib/projectsClient';
 import { getTasksForProjects, Task } from '../lib/tasksClient';
@@ -76,6 +76,16 @@ function CalendarPage() {
     return map;
   }, [tasks]);
 
+  const todayKey = toDateKey(new Date());
+  const scheduledTasks = tasks.filter((task) => task.due_date);
+  const activeScheduledTasks = scheduledTasks.filter((task) => task.status !== 'completed');
+  const dueToday = activeScheduledTasks.filter((task) => task.due_date === todayKey);
+  const overdueTasks = activeScheduledTasks.filter((task) => task.due_date && task.due_date < todayKey);
+  const upcomingTasks = activeScheduledTasks
+    .filter((task) => task.due_date && task.due_date >= todayKey)
+    .sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)))
+    .slice(0, 8);
+
   const today = new Date();
   const monthDate = new Date(today.getFullYear(), today.getMonth() + offset, 1);
   const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
@@ -112,11 +122,14 @@ function CalendarPage() {
 
   return (
     <section className="space-y-4">
-      <div className="border border-border bg-surface p-4 shadow-xl shadow-black/10">
+      <div className="rounded-lg border border-white/10 bg-surface p-5 shadow-2xl shadow-black/20">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-accent">Calendar</p>
-            <h2 className="mt-2 text-2xl font-semibold text-white sm:text-3xl">Due date overview</h2>
+            <h2 className="mt-3 text-3xl font-semibold text-white sm:text-4xl">Due date overview</h2>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
+              See scheduled work by month or week, then use the side panels to catch what needs attention next.
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <div className="grid grid-cols-2 rounded-lg border border-border bg-[#0b101d] p-1">
@@ -156,60 +169,138 @@ function CalendarPage() {
 
       {error ? <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</p> : null}
 
-      <div className="rounded-lg border border-border bg-surface p-4 shadow-lg shadow-black/10">
-        {loading ? (
-          <p className="rounded-lg border border-border bg-[#0b101d] p-8 text-sm text-slate-300">Loading calendar...</p>
-        ) : view === 'month' ? (
-          <div className="grid grid-cols-7 gap-2">
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-              <div key={day} className="px-2 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                {day}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          { label: 'Scheduled', value: scheduledTasks.length, icon: CalendarDays },
+          { label: 'Due today', value: dueToday.length, icon: Clock3 },
+          { label: 'Overdue', value: overdueTasks.length, icon: AlertTriangle },
+          { label: 'Completed scheduled', value: scheduledTasks.filter((task) => task.status === 'completed').length, icon: CheckCircle2 },
+        ].map((item) => {
+          const Icon = item.icon;
+          return (
+            <article key={item.label} className="rounded-lg border border-border bg-surface p-4 shadow-lg shadow-black/10">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm text-slate-400">{item.label}</p>
+                <Icon className="h-4 w-4 text-accent" />
               </div>
-            ))}
-            {monthCells.map((date, index) => {
-              if (!date) {
-                return <div key={`empty-${index}`} className="min-h-[130px] rounded-lg border border-transparent" />;
-              }
-              const dateKey = toDateKey(date);
-              const dayTasks = tasksByDate.get(dateKey) ?? [];
-              const isToday = dateKey === toDateKey(new Date());
+              <p className="mt-3 text-3xl font-semibold text-white">{item.value}</p>
+            </article>
+          );
+        })}
+      </div>
 
-              return (
-                <div key={dateKey} className={`min-h-[130px] rounded-lg border p-2 ${isToday ? 'border-accent bg-red-500/5' : 'border-border bg-[#0b101d]'}`}>
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-sm font-semibold text-white">{date.getDate()}</span>
-                    {dayTasks.length > 0 ? <span className="rounded-md border border-border bg-[#111827] px-1.5 py-0.5 text-[0.68rem] text-slate-300">{dayTasks.length}</span> : null}
+      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0 rounded-lg border border-border bg-surface p-4 shadow-lg shadow-black/10">
+          {loading ? (
+            <p className="rounded-lg border border-border bg-[#0b101d] p-8 text-sm text-slate-300">Loading calendar...</p>
+          ) : view === 'month' ? (
+            <div className="overflow-x-auto">
+              <div className="grid min-w-[760px] grid-cols-7 gap-2">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                  <div key={day} className="px-2 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    {day}
                   </div>
-                  <div className="space-y-2">{dayTasks.slice(0, 3).map(renderTaskChip)}</div>
-                  {dayTasks.length > 3 ? <p className="mt-2 text-xs text-slate-500">+{dayTasks.length - 3} more</p> : null}
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="grid gap-3 lg:grid-cols-7">
-            {weekCells.map((date) => {
-              const dateKey = toDateKey(date);
-              const dayTasks = tasksByDate.get(dateKey) ?? [];
-              const isToday = dateKey === toDateKey(new Date());
+                ))}
+                {monthCells.map((date, index) => {
+                  if (!date) {
+                    return <div key={`empty-${index}`} className="min-h-[130px] rounded-lg border border-transparent" />;
+                  }
+                  const dateKey = toDateKey(date);
+                  const dayTasks = tasksByDate.get(dateKey) ?? [];
+                  const isToday = dateKey === todayKey;
 
-              return (
-                <section key={dateKey} className={`min-h-[420px] rounded-lg border p-3 ${isToday ? 'border-accent bg-red-500/5' : 'border-border bg-[#0b101d]'}`}>
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.18em] text-slate-500">{date.toLocaleDateString(undefined, { weekday: 'short' })}</p>
-                      <p className="mt-1 text-lg font-semibold text-white">{date.getDate()}</p>
+                  return (
+                    <div key={dateKey} className={`min-h-[130px] rounded-lg border p-2 ${isToday ? 'border-accent bg-red-500/5' : 'border-border bg-[#0b101d]'}`}>
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="text-sm font-semibold text-white">{date.getDate()}</span>
+                        {dayTasks.length > 0 ? <span className="rounded-md border border-border bg-[#111827] px-1.5 py-0.5 text-[0.68rem] text-slate-300">{dayTasks.length}</span> : null}
+                      </div>
+                      <div className="space-y-2">{dayTasks.slice(0, 3).map(renderTaskChip)}</div>
+                      {dayTasks.length > 3 ? <p className="mt-2 text-xs text-slate-500">+{dayTasks.length - 3} more</p> : null}
                     </div>
-                    <CalendarDays className="h-4 w-4 text-accent" />
-                  </div>
-                  <div className="space-y-2">
-                    {dayTasks.length === 0 ? <p className="text-sm text-slate-500">No due tasks.</p> : dayTasks.map(renderTaskChip)}
-                  </div>
-                </section>
-              );
-            })}
-          </div>
-        )}
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-3 lg:grid-cols-7">
+              {weekCells.map((date) => {
+                const dateKey = toDateKey(date);
+                const dayTasks = tasksByDate.get(dateKey) ?? [];
+                const isToday = dateKey === todayKey;
+
+                return (
+                  <section key={dateKey} className={`min-h-[420px] rounded-lg border p-3 ${isToday ? 'border-accent bg-red-500/5' : 'border-border bg-[#0b101d]'}`}>
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.18em] text-slate-500">{date.toLocaleDateString(undefined, { weekday: 'short' })}</p>
+                        <p className="mt-1 text-lg font-semibold text-white">{date.getDate()}</p>
+                      </div>
+                      <CalendarDays className="h-4 w-4 text-accent" />
+                    </div>
+                    <div className="space-y-2">
+                      {dayTasks.length === 0 ? <p className="text-sm text-slate-500">No due tasks.</p> : dayTasks.map(renderTaskChip)}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <aside className="grid h-fit gap-4 md:grid-cols-2 2xl:grid-cols-1">
+          <section className="rounded-lg border border-border bg-surface p-4 shadow-lg shadow-black/10">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted">Next</p>
+                <h3 className="mt-2 font-semibold text-white">Upcoming Deadlines</h3>
+              </div>
+              <CalendarDays className="h-5 w-5 text-accent" />
+            </div>
+            {upcomingTasks.length === 0 ? (
+              <p className="rounded-lg border border-border bg-[#0b101d] p-4 text-sm leading-6 text-slate-400">
+                Add due dates to active tasks and your next deadlines will collect here.
+              </p>
+            ) : (
+              <div className="grid gap-2">
+                {upcomingTasks.map((task) => (
+                  <article key={task.id} className="rounded-lg border border-border bg-[#0b101d] p-3">
+                    <p className="truncate text-sm font-semibold text-white">{task.title}</p>
+                    <p className="mt-1 text-xs text-slate-400">
+                      {task.due_date} - {projectNames.get(task.project_id) ?? 'Project'}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-lg border border-border bg-surface p-4 shadow-lg shadow-black/10">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted">Risk</p>
+                <h3 className="mt-2 font-semibold text-white">Overdue Tasks</h3>
+              </div>
+              <AlertTriangle className="h-5 w-5 text-accent" />
+            </div>
+            {overdueTasks.length === 0 ? (
+              <p className="rounded-lg border border-border bg-[#0b101d] p-4 text-sm leading-6 text-slate-400">
+                No overdue tasks. Your deadline surface is clean.
+              </p>
+            ) : (
+              <div className="grid gap-2">
+                {overdueTasks.slice(0, 8).map((task) => (
+                  <article key={task.id} className="rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+                    <p className="truncate text-sm font-semibold text-white">{task.title}</p>
+                    <p className="mt-1 text-xs text-red-100">
+                      Due {task.due_date} - {projectNames.get(task.project_id) ?? 'Project'}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        </aside>
       </div>
     </section>
   );
