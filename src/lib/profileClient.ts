@@ -29,7 +29,6 @@ export async function createOrUpdateProfile(
     id: userId,
     email,
     display_name: displayName || fallbackName,
-    updated_at: new Date().toISOString(),
   };
 
   if (avatarUrl) {
@@ -49,14 +48,14 @@ export async function updateProfile(
   userId: string,
   updates: Partial<Pick<Profile, 'display_name' | 'avatar_url' | 'timezone' | 'theme_preference'>>
 ) {
-  const { data, error } = await db
-    .from('profiles')
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', userId)
-    .select()
-    .single();
+  const withTimestamp = { ...updates, updated_at: new Date().toISOString() };
+  let result = await db.from('profiles').update(withTimestamp).eq('id', userId).select().single();
 
-  return { data: data as Profile | null, error };
+  if (result.error?.code === 'PGRST204' && result.error.message?.includes('updated_at')) {
+    result = await db.from('profiles').update(updates).eq('id', userId).select().single();
+  }
+
+  return { data: result.data as Profile | null, error: result.error };
 }
 
 export async function getProfileByEmail(email: string) {
