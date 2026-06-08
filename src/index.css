@@ -10,13 +10,20 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: rgb(15, 23, 42);
+  background: #09090f;
 }
 
 * {
   box-sizing: border-box;
 }
 
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
 .btn-primary {
-  @apply rounded-2xl bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500;
+  @apply rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500;
 }

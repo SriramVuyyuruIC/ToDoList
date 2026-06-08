@@ -1,10 +1,13 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { createOrUpdateProfile } from '../lib/profileClient';
-import type { AuthChangeEvent, AuthError, Session, User } from '@supabase/supabase-js';
+import { createOrUpdateProfile, updateProfile as updateStoredProfile } from '../lib/profileClient';
+import type { AuthChangeEvent, AuthError, PostgrestError, Session, User } from '@supabase/supabase-js';
 
 type ProfileUpdateInput = {
-  username: string;
+  displayName: string;
+  avatarUrl: string;
+  timezone: string;
+  themePreference: 'dark' | 'system';
 };
 
 type AuthContextType = {
@@ -12,10 +15,10 @@ type AuthContextType = {
   session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
-  signUp: (email: string, password: string) => Promise<{ error: AuthError | null }>;
+  signUp: (email: string, password: string, displayName?: string) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<{ error: AuthError | null }>;
   resetPassword: (email: string) => Promise<{ error: AuthError | null }>;
-  updateProfile: (updates: ProfileUpdateInput) => Promise<{ error: AuthError | null }>;
+  updateProfile: (updates: ProfileUpdateInput) => Promise<{ error: AuthError | PostgrestError | null }>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -39,7 +42,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        await createOrUpdateProfile(session.user.id, session.user.email, (session.user.user_metadata as any)?.username ?? '');
+        await createOrUpdateProfile(
+          session.user.id,
+          session.user.email ?? null,
+          (session.user.user_metadata as any)?.display_name ?? ''
+        );
       }
       setLoading(false);
     }
@@ -50,7 +57,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        await createOrUpdateProfile(session.user.id, session.user.email, (session.user.user_metadata as any)?.username ?? '');
+        await createOrUpdateProfile(
+          session.user.id,
+          session.user.email ?? null,
+          (session.user.user_metadata as any)?.display_name ?? ''
+        );
       }
       setLoading(false);
     });
@@ -71,18 +82,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(data.user ?? null);
           setSession(data.session ?? null);
           if (data.user) {
-            await createOrUpdateProfile(data.user.id, data.user.email, (data.user.user_metadata as any)?.username ?? '');
+            await createOrUpdateProfile(
+              data.user.id,
+              data.user.email ?? null,
+              (data.user.user_metadata as any)?.display_name ?? ''
+            );
           }
         }
         return { error };
       },
-      signUp: async (email: string, password: string) => {
-        const { data, error } = await supabase.auth.signUp({ email, password });
+      signUp: async (email: string, password: string, displayName = '') => {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              display_name: displayName,
+            },
+          },
+        });
         if (!error) {
           setUser(data.user ?? null);
           setSession(data.session ?? null);
           if (data.user) {
-            await createOrUpdateProfile(data.user.id, data.user.email, (data.user.user_metadata as any)?.username ?? '');
+            await createOrUpdateProfile(data.user.id, data.user.email ?? null, displayName);
           }
         }
         return { error };
@@ -101,24 +124,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
         return { error };
       },
-      updateProfile: async ({ username }: ProfileUpdateInput) => {
+      updateProfile: async ({ displayName, avatarUrl, timezone, themePreference }: ProfileUpdateInput) => {
         const { data: authData, error: authError } = await supabase.auth.updateUser({
           data: {
-            username,
+            display_name: displayName,
+            avatar_url: avatarUrl,
+            timezone,
+            theme_preference: themePreference,
           },
         });
 
-        const profileResult = await createOrUpdateProfile(authData.user?.id ?? '', authData.user?.email ?? null, username);
+        if (authError) {
+          return { error: authError };
+        }
 
-        if (!authError && profileResult.error) {
+        const userId = authData.user?.id ?? user?.id;
+        if (!userId) {
+          return { error: null };
+        }
+
+        await createOrUpdateProfile(userId, authData.user?.email ?? user?.email ?? null, displayName);
+        const profileResult = await updateStoredProfile(userId, {
+          display_name: displayName,
+          avatar_url: avatarUrl || null,
+          timezone: timezone || null,
+          theme_preference: themePreference,
+        });
+
+        if (profileResult.error) {
           return { error: profileResult.error };
         }
 
-        if (!authError) {
-          setUser(authData.user ?? null);
-        }
+        setUser(authData.user ?? null);
 
-        return { error: authError ?? profileResult.error };
+        return { error: null };
       },
     }),
     [user, session, loading]

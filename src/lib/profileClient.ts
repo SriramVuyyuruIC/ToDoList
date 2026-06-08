@@ -2,23 +2,56 @@ import { supabase } from './supabaseClient';
 
 export type Profile = {
   id: string;
-  email: string;
-  username: string;
+  email: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  timezone: string | null;
+  theme_preference: 'dark' | 'system' | null;
   created_at: string;
+  updated_at: string | null;
 };
 
+const db = supabase as any;
+
 export async function getProfile(userId: string) {
-  return supabase.from<Profile>('profiles').select('*').eq('id', userId).single();
+  const { data, error } = await db.from('profiles').select('*').eq('id', userId).maybeSingle();
+  return { data: data as Profile | null, error };
 }
 
-export async function createOrUpdateProfile(userId: string, email: string | null, username: string) {
-  return supabase.from<Profile>('profiles').upsert({ id: userId, email, username }, { onConflict: 'id' }).select().single();
+export async function createOrUpdateProfile(userId: string, email: string | null, displayName: string) {
+  const fallbackName = email?.split('@')[0] ?? 'TaskFlow User';
+  const { data, error } = await db
+    .from('profiles')
+    .upsert(
+      {
+        id: userId,
+        email,
+        display_name: displayName || fallbackName,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    )
+    .select()
+    .single();
+
+  return { data: data as Profile | null, error };
 }
 
-export async function updateProfile(userId: string, username: string) {
-  return supabase.from<Profile>('profiles').update({ username }).eq('id', userId).select().single();
+export async function updateProfile(
+  userId: string,
+  updates: Partial<Pick<Profile, 'display_name' | 'avatar_url' | 'timezone' | 'theme_preference'>>
+) {
+  const { data, error } = await db
+    .from('profiles')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', userId)
+    .select()
+    .single();
+
+  return { data: data as Profile | null, error };
 }
 
 export async function getProfileByEmail(email: string) {
-  return supabase.from<Profile>('profiles').select('*').eq('email', email).single();
+  const { data, error } = await db.from('profiles').select('*').eq('email', email).maybeSingle();
+  return { data: data as Profile | null, error };
 }

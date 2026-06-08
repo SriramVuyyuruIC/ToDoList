@@ -1,0 +1,45 @@
+﻿
+> taskflow@0.1.0 build
+> tsc && vite build
+
+src/auth/AuthProvider.tsx(42,54): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string | null'.
+  Type 'undefined' is not assignable to type 'string | null'.
+src/auth/AuthProvider.tsx(53,54): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string | null'.
+  Type 'undefined' is not assignable to type 'string | null'.
+src/lib/profileClient.ts(11,24): error TS2344: Type 'Profile' does not satisfy the constraint 'string'.
+src/lib/profileClient.ts(11,69): error TS2345: Argument of type '"id"' is not assignable to parameter of type 'never'.
+src/lib/profileClient.ts(15,24): error TS2344: Type 'Profile' does not satisfy the constraint 'string'.
+src/lib/profileClient.ts(15,63): error TS2353: Object literal may only specify known properties, and 'id' does not exist in type 'never[]'.
+src/lib/profileClient.ts(19,24): error TS2344: Type 'Profile' does not satisfy the constraint 'string'.
+src/lib/profileClient.ts(19,61): error TS2345: Argument of type '{ username: string; }' is not assignable to parameter of type 'never'.
+src/lib/profileClient.ts(19,78): error TS2345: Argument of type '"id"' is not assignable to parameter of type 'never'.
+src/lib/profileClient.ts(23,24): error TS2344: Type 'Profile' does not satisfy the constraint 'string'.
+src/lib/profileClient.ts(23,69): error TS2345: Argument of type '"email"' is not assignable to parameter of type 'never'.
+src/lib/projectsClient.ts(26,11): error TS2344: Type 'Project' does not satisfy the constraint 'string'.
+src/lib/projectsClient.ts(34,11): error TS2344: Type 'Project' does not satisfy the constraint 'string'.
+src/lib/projectsClient.ts(35,15): error TS2353: Object literal may only specify known properties, and 'name' does not exist in type 'never[]'.
+src/lib/projectsClient.ts(49,11): error TS2344: Type 'ProjectMember' does not satisfy the constraint 'string'.
+src/lib/projectsClient.ts(51,9): error TS2345: Argument of type '"project_id"' is not assignable to parameter of type 'never'.
+src/lib/projectsClient.ts(57,11): error TS2344: Type 'Profile' does not satisfy the constraint 'string'.
+src/lib/projectsClient.ts(59,9): error TS2345: Argument of type '"email"' is not assignable to parameter of type 'never'.
+src/lib/tasksClient.ts(14,11): error TS2344: Type 'Task' does not satisfy the constraint 'string'.
+src/lib/tasksClient.ts(16,9): error TS2345: Argument of type '"project_id"' is not assignable to parameter of type 'never'.
+src/lib/tasksClient.ts(21,24): error TS2344: Type 'Task' does not satisfy the constraint 'string'.
+src/lib/tasksClient.ts(21,52): error TS2345: Argument of type 'Omit<Task, "id"> & { project_id: string; }' is not assignable to parameter of type 'never[]'.
+  Type 'Omit<Task, "id"> & { project_id: string; }' is missing the following properties from type 'never[]': length, pop, push, concat, and 28 more.
+src/lib/tasksClient.ts(26,11): error TS2344: Type 'Task' does not satisfy the constraint 'string'.
+src/lib/tasksClient.ts(27,13): error TS2345: Argument of type '{ title: string; description: string; due: string; completed: boolean; position: number; }' is not assignable to parameter of type 'never'.
+src/lib/tasksClient.ts(28,9): error TS2345: Argument of type '"id"' is not assignable to parameter of type 'never'.
+src/lib/tasksClient.ts(33,24): error TS2344: Type 'Task' does not satisfy the constraint 'string'.
+src/lib/tasksClient.ts(33,57): error TS2345: Argument of type '"id"' is not assignable to parameter of type 'never'.
+src/lib/tasksClient.ts(38,24): error TS2344: Type 'Task' does not satisfy the constraint 'string'.
+src/lib/tasksClient.ts(38,52): error TS2345: Argument of type '{ id: string; position: number; }[]' is not assignable to parameter of type 'never[]'.
+  Type '{ id: string; position: number; }' is not assignable to type 'never'.
+src/pages/DashboardPage.tsx(97,63): error TS18047: 'user' is possibly 'null'.
+src/pages/DashboardPage.tsx(125,57): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string'.
+  Type 'null' is not assignable to type 'string'.
+src/pages/DashboardPage.tsx(307,17): error TS2322: Type 'string | null' is not assignable to type 'string | number | readonly string[] | undefined'.
+  Type 'null' is not assignable to type 'string | number | readonly string[] | undefined'.
+src/pages/ProjectsPage.tsx(21,49): error TS18047: 'user' is possibly 'null'.
+src/pages/ProjectsPage.tsx(41,55): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string'.
+  Type 'null' is not assignable to type 'string'.
